@@ -14,7 +14,7 @@ export async function signJWT(payload, secret, expiresInMinutes) {
     'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
-  return `${data}.${base64url(sig)}`;
+  return `${data}.${base64url(bufferToString(sig))}`;
 }
 
 export async function verifyJWT(token, secret) {

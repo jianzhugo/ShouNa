@@ -44,6 +44,8 @@ export async function onRequestPost(context) {
       'SELECT fm.family_id, fm.role, f.name as family_name FROM family_members fm JOIN families f ON fm.family_id = f.id WHERE fm.user_id = ? AND f.deleted_at IS NULL'
     ).bind(user.id).all();
 
+    const familyList = families && families.results ? families.results : [];
+
     const isLocal = request.url.includes('localhost') || request.url.includes('127.0.0.1');
     const cookies = setAuthCookies(token, refreshToken, isLocal);
 
@@ -55,7 +57,7 @@ export async function onRequestPost(context) {
         id: user.id,
         email: user.email,
         name: user.name,
-        families: families.results
+        families: familyList
       }
     }), {
       status: 200,
