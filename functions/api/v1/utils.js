@@ -14,7 +14,7 @@ export async function signJWT(payload, secret, expiresInMinutes) {
     'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
-  return `${data}.${base64url(bufferToString(sig))}`;
+  return `${data}.${base64urlBytes(new Uint8Array(sig))}`;
 }
 
 export async function verifyJWT(token, secret) {
@@ -30,13 +30,31 @@ export async function verifyJWT(token, secret) {
   const valid = await crypto.subtle.verify('HMAC', key, sigBuffer, encoder.encode(`${headerB64}.${payloadB64}`));
   if (!valid) return null;
 
-  const payload = JSON.parse(bufferToString(base64urlToBuffer(payloadB64)));
+  // 解码 payload：先 base64 解码得到 UTF-8 字节，再用 TextDecoder 转为字符串
+  const payloadBuffer = base64urlToBuffer(payloadB64);
+  const payloadStr = new TextDecoder().decode(payloadBuffer);
+  const payload = JSON.parse(payloadStr);
   if (payload.exp < Math.floor(Date.now() / 1000)) return null;
   return payload;
 }
 
 function base64url(str) {
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // 先将字符串编码为 UTF-8 字节，再转换为 Latin1 字符串，最后 base64 编码
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64urlBytes(bytes) {
+  // 直接将字节数组转换为 base64，不进行 UTF-8 编码
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function base64urlToBuffer(b64) {
@@ -167,7 +185,7 @@ export async function isFamilyAdmin(db, userId, familyId) {
 // Set JWT cookies
 export function setAuthCookies(token, refreshToken, isLocal = false) {
   const secure = isLocal ? '' : 'Secure; ';
-  const cookieOptions = `HttpOnly; ${secure}SameSite=Strict; Path=/`;
+  const cookieOptions = `HttpOnly; ${secure}SameSite=Lax; Path=/`;
   return [
     `token=${token}; ${cookieOptions}; Max-Age=900`,
     `refresh_token=${refreshToken}; ${cookieOptions}; Max-Age=604800`
