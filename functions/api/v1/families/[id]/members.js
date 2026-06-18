@@ -16,7 +16,7 @@ export async function onRequestGet(context) {
     }
 
     const members = await env.DB.prepare(
-      `SELECT fm.user_id, fm.role, fm.joined_at, u.name, u.email
+      `SELECT fm.user_id, fm.role, fm.joined_at, u.name, u.email, u.avatar
        FROM family_members fm
        JOIN users u ON fm.user_id = u.id
        WHERE fm.family_id = ? AND u.deleted_at IS NULL

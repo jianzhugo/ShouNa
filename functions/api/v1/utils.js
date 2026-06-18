@@ -98,22 +98,20 @@ export function generateInviteCode() {
   return code;
 }
 
-// Auto-initialize database schema on first request
-let _schemaInitialized = false;
+// Auto-initialize database schema and run migrations
 export async function ensureSchema(db) {
-  if (_schemaInitialized) return;
   try {
     const check = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").first();
-    if (check) { _schemaInitialized = true; return; }
-    const statements = [
-      `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT)`,
+    if (!check) {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, name TEXT NOT NULL, avatar TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT)`,
       `CREATE TABLE IF NOT EXISTS families (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_by INTEGER NOT NULL, invite_code TEXT UNIQUE, invite_code_expires_at TEXT, invite_code_max_uses INTEGER DEFAULT 10, invite_code_used_count INTEGER DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, FOREIGN KEY (created_by) REFERENCES users(id))`,
       `CREATE TABLE IF NOT EXISTS family_members (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, family_id INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin', 'member')), joined_at TEXT NOT NULL DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (family_id) REFERENCES families(id), UNIQUE(user_id, family_id))`,
       `CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, family_id INTEGER NOT NULL, name TEXT NOT NULL, sort_order INTEGER DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), FOREIGN KEY (family_id) REFERENCES families(id))`,
       `CREATE TABLE IF NOT EXISTS houses (id INTEGER PRIMARY KEY AUTOINCREMENT, family_id INTEGER NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, FOREIGN KEY (family_id) REFERENCES families(id))`,
       `CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT, house_id INTEGER NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, FOREIGN KEY (house_id) REFERENCES houses(id))`,
       `CREATE TABLE IF NOT EXISTS storage_spots (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, FOREIGN KEY (room_id) REFERENCES rooms(id))`,
-      `CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, storage_spot_id INTEGER NOT NULL, category_id INTEGER, name TEXT NOT NULL, quantity INTEGER DEFAULT 1, note TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, FOREIGN KEY (storage_spot_id) REFERENCES storage_spots(id), FOREIGN KEY (category_id) REFERENCES categories(id))`,
+      `CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, storage_spot_id INTEGER NOT NULL, category_id INTEGER, name TEXT NOT NULL, quantity INTEGER DEFAULT 1, note TEXT, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, FOREIGN KEY (storage_spot_id) REFERENCES storage_spots(id), FOREIGN KEY (category_id) REFERENCES categories(id), FOREIGN KEY (created_by) REFERENCES users(id))`,
       `CREATE TABLE IF NOT EXISTS item_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL, url TEXT NOT NULL, sort_order INTEGER DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), FOREIGN KEY (item_id) REFERENCES items(id))`,
       `CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, family_id INTEGER NOT NULL, user_id INTEGER NOT NULL, action TEXT NOT NULL CHECK(action IN ('create', 'update', 'move', 'delete', 'restore')), entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL, entity_name TEXT, details TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), FOREIGN KEY (family_id) REFERENCES families(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
       `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
@@ -134,7 +132,47 @@ export async function ensureSchema(db) {
     ];
     const batch = statements.map(sql => db.prepare(sql));
     await db.batch(batch);
-    _schemaInitialized = true;
+    }
+
+    // Always run migrations (idempotent - checks before altering)
+    try {
+      // Users table: add avatar column
+      const userCols = await db.prepare("PRAGMA table_info(users)").all();
+      const userColNames = userCols.results.map(c => c.name);
+      if (!userColNames.includes('avatar')) {
+        await db.prepare("ALTER TABLE users ADD COLUMN avatar TEXT").run();
+      }
+
+      // Families table: add invite_code_max_uses and invite_code_used_count
+      const familyCols = await db.prepare("PRAGMA table_info(families)").all();
+      const familyColNames = familyCols.results.map(c => c.name);
+      if (!familyColNames.includes('invite_code_max_uses')) {
+        await db.prepare("ALTER TABLE families ADD COLUMN invite_code_max_uses INTEGER DEFAULT 10").run();
+      }
+      if (!familyColNames.includes('invite_code_used_count')) {
+        await db.prepare("ALTER TABLE families ADD COLUMN invite_code_used_count INTEGER DEFAULT 0").run();
+      }
+
+      // Items table: add created_by column
+      const itemCols = await db.prepare("PRAGMA table_info(items)").all();
+      const itemColNames = itemCols.results.map(c => c.name);
+      if (!itemColNames.includes('created_by')) {
+        await db.prepare("ALTER TABLE items ADD COLUMN created_by INTEGER REFERENCES users(id)").run();
+      }
+
+      // Deduplicate categories: keep the lowest id per (family_id, name)
+      try {
+        await db.prepare(
+          `DELETE FROM categories WHERE id NOT IN (
+            SELECT MIN(id) FROM categories GROUP BY family_id, name
+          )`
+        ).run();
+      } catch (e) {
+        console.error('Category dedup migration error:', e);
+      }
+    } catch (e) {
+      console.error('Migration error:', e);
+    }
   } catch (e) {
     console.error('Schema init error:', e);
   }

@@ -17,9 +17,15 @@ export async function onRequestGet(context) {
     // Stats
     const [houseCount, roomCount, storageCount, itemCount] = await Promise.all([
       env.DB.prepare('SELECT COUNT(*) as count FROM houses WHERE family_id = ? AND deleted_at IS NULL').bind(familyId).first(),
-      env.DB.prepare('SELECT COUNT(*) as count FROM rooms WHERE family_id = ? AND deleted_at IS NULL').bind(familyId).first(),
-      env.DB.prepare('SELECT COUNT(*) as count FROM storage_spots WHERE family_id = ? AND deleted_at IS NULL').bind(familyId).first(),
-      env.DB.prepare('SELECT COUNT(*) as count FROM items WHERE family_id = ? AND deleted_at IS NULL').bind(familyId).first()
+      env.DB.prepare('SELECT COUNT(*) as count FROM rooms r JOIN houses h ON r.house_id = h.id WHERE h.family_id = ? AND r.deleted_at IS NULL').bind(familyId).first(),
+      env.DB.prepare('SELECT COUNT(*) as count FROM storage_spots sp JOIN rooms r ON sp.room_id = r.id JOIN houses h ON r.house_id = h.id WHERE h.family_id = ? AND sp.deleted_at IS NULL').bind(familyId).first(),
+      env.DB.prepare(`
+        SELECT COUNT(*) as count FROM items i
+        JOIN storage_spots sp ON i.storage_spot_id = sp.id
+        JOIN rooms r ON sp.room_id = r.id
+        JOIN houses h ON r.house_id = h.id
+        WHERE h.family_id = ? AND i.deleted_at IS NULL
+      `).bind(familyId).first()
     ]);
 
     const stats = {
@@ -53,14 +59,14 @@ export async function onRequestGet(context) {
        LEFT JOIN storage_spots s ON i.storage_spot_id = s.id
        LEFT JOIN rooms r ON s.room_id = r.id
        LEFT JOIN houses h ON r.house_id = h.id
-       WHERE i.family_id = ? AND i.deleted_at IS NULL
+       WHERE h.family_id = ? AND i.deleted_at IS NULL
        ORDER BY i.created_at DESC
        LIMIT 10`
     ).bind(familyId).all();
 
     // Family members
     const members = await env.DB.prepare(
-      `SELECT fm.role, u.id, u.name, u.email
+      `SELECT fm.role, u.id, u.name, u.email, u.avatar
        FROM family_members fm
        JOIN users u ON fm.user_id = u.id AND u.deleted_at IS NULL
        WHERE fm.family_id = ?`

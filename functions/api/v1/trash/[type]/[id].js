@@ -18,7 +18,19 @@ export async function onRequestDelete(context) {
     const entity = await getEntity(env.DB, type, id);
     if (!entity) return errorResponse('NOT_FOUND', '记录不存在', 404);
 
-    const admin = await isFamilyAdmin(env.DB, user.id, entity.family_id);
+    // Get family_id (items don't have family_id directly, need to resolve via hierarchy)
+    let familyId = entity.family_id;
+    if (type === 'item') {
+      const spot = await env.DB.prepare(
+        `SELECT h.family_id FROM storage_spots s
+         JOIN rooms r ON s.room_id = r.id
+         JOIN houses h ON r.house_id = h.id
+         WHERE s.id = ?`
+      ).bind(entity.storage_spot_id).first();
+      familyId = spot?.family_id;
+    }
+
+    const admin = await isFamilyAdmin(env.DB, user.id, familyId);
     if (!admin) return errorResponse('FORBIDDEN', '仅管理员可永久删除', 403);
 
     const table = getTableName(type);

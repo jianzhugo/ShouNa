@@ -10,7 +10,7 @@ export async function onRequestGet(context) {
     }
 
     const families = await env.DB.prepare(
-      `SELECT f.id, f.name, f.invite_code, f.invite_code_expires_at, fm.role, f.created_at
+      `SELECT f.id, f.name, f.invite_code, f.invite_code_expires_at, f.invite_code_max_uses, f.invite_code_used_count, fm.role, f.created_at
        FROM families f
        JOIN family_members fm ON fm.family_id = f.id
        WHERE fm.user_id = ? AND f.deleted_at IS NULL
@@ -22,7 +22,13 @@ export async function onRequestGet(context) {
         const [memberCount, houseCount, itemCount] = await Promise.all([
           env.DB.prepare('SELECT COUNT(*) as count FROM family_members WHERE family_id = ?').bind(family.id).first(),
           env.DB.prepare('SELECT COUNT(*) as count FROM houses WHERE family_id = ? AND deleted_at IS NULL').bind(family.id).first(),
-          env.DB.prepare('SELECT COUNT(*) as count FROM items WHERE family_id = ? AND deleted_at IS NULL').bind(family.id).first(),
+          env.DB.prepare(`
+            SELECT COUNT(*) as count FROM items i
+            JOIN storage_spots ss ON i.storage_spot_id = ss.id
+            JOIN rooms r ON ss.room_id = r.id
+            JOIN houses h ON r.house_id = h.id
+            WHERE h.family_id = ? AND i.deleted_at IS NULL
+          `).bind(family.id).first(),
         ]);
 
         return {
@@ -30,6 +36,8 @@ export async function onRequestGet(context) {
           name: family.name,
           invite_code: family.invite_code,
           invite_code_expires_at: family.invite_code_expires_at,
+          invite_code_max_uses: family.invite_code_max_uses,
+          invite_code_used_count: family.invite_code_used_count,
           role: family.role,
           created_at: family.created_at,
           member_count: memberCount.count,

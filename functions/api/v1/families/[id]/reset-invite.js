@@ -22,12 +22,14 @@ export async function onRequestPost(context) {
       'UPDATE families SET invite_code = ?, invite_code_expires_at = ?, invite_code_used_count = 0 WHERE id = ?'
     ).bind(newInviteCode, newExpiresAt, familyId).run();
 
-    await logActivity(env.DB, familyId, user.id, 'reset_invite', 'family', familyId, null);
+    await logActivity(env.DB, familyId, user.id, 'update', 'family', familyId, null);
 
     return jsonResponse({
       data: {
         invite_code: newInviteCode,
         invite_code_expires_at: newExpiresAt,
+        invite_code_max_uses: 10,
+        invite_code_used_count: 0,
       },
       message: '邀请码已重置',
     });

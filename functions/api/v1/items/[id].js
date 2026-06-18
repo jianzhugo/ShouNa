@@ -1,4 +1,4 @@
-import { getAuthUser, isFamilyMember, jsonResponse, errorResponse, logActivity } from '../utils';
+import { getAuthUser, isFamilyMember, jsonResponse, errorResponse, logActivity, ensureSchema } from '../utils';
 
 async function getItemFamilyId(db, itemId) {
   const row = await db.prepare(
@@ -15,6 +15,8 @@ export async function onRequestGet(context) {
   const { request, env, params } = context;
 
   try {
+    await ensureSchema(env.DB);
+
     const user = await getAuthUser(request, env);
     if (!user) {
       return errorResponse('UNAUTHORIZED', '请先登录', 401);
@@ -32,12 +34,16 @@ export async function onRequestGet(context) {
       return errorResponse('FORBIDDEN', '无权访问该物品');
     }
 
-    // Get item with category name and full location path
+    // Get item with category name, creator name and full location path
     const item = await env.DB.prepare(
       `SELECT i.*, c.name as category_name,
-              h.name as house_name, r.name as room_name, s.name as storage_name
+              u.name as creator_name,
+              h.id as house_id, h.name as house_name,
+              r.id as room_id, r.name as room_name,
+              s.name as storage_name
        FROM items i
        LEFT JOIN categories c ON i.category_id = c.id
+       LEFT JOIN users u ON i.created_by = u.id
        JOIN storage_spots s ON i.storage_spot_id = s.id
        JOIN rooms r ON s.room_id = r.id
        JOIN houses h ON r.house_id = h.id

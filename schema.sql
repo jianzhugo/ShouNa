@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   name TEXT NOT NULL,
+  avatar TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   deleted_at TEXT
@@ -87,11 +88,13 @@ CREATE TABLE IF NOT EXISTS items (
   name TEXT NOT NULL,
   quantity INTEGER DEFAULT 1,
   note TEXT,
+  created_by INTEGER,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   deleted_at TEXT,
   FOREIGN KEY (storage_spot_id) REFERENCES storage_spots(id),
-  FOREIGN KEY (category_id) REFERENCES categories(id)
+  FOREIGN KEY (category_id) REFERENCES categories(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
 -- Item photos table
@@ -109,7 +112,7 @@ CREATE TABLE IF NOT EXISTS activity_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   family_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
-  action TEXT NOT NULL CHECK(action IN ('create', 'update', 'move', 'delete', 'restore')),
+  action TEXT NOT NULL CHECK(action IN ('create', 'update', 'move', 'delete', 'restore', 'reset_invite')),
   entity_type TEXT NOT NULL,
   entity_id INTEGER NOT NULL,
   entity_name TEXT,

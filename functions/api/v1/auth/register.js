@@ -138,12 +138,14 @@ export async function onRequestPost(context) {
         ).bind(inviteCodeFamilyId).run();
       }
 
-      // Insert default categories for new family
-      const defaultCategories = ['证件', '数码', '工具', '药品', '衣物', '书籍', '日用', '食品', '其他'];
-      for (let i = 0; i < defaultCategories.length; i++) {
-        await env.DB.prepare(
-          'INSERT INTO categories (family_id, name, sort_order) VALUES (?, ?, ?)'
-        ).bind(familyId, defaultCategories[i], i).run();
+      // Insert default categories for new family only
+      if (action === 'create' || isFirstUser) {
+        const defaultCategories = ['证件', '数码', '工具', '药品', '衣物', '书籍', '日用', '食品', '其他'];
+        for (let i = 0; i < defaultCategories.length; i++) {
+          await env.DB.prepare(
+            'INSERT INTO categories (family_id, name, sort_order) VALUES (?, ?, ?)'
+          ).bind(familyId, defaultCategories[i], i).run();
+        }
       }
     }
 

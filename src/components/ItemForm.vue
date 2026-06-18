@@ -101,7 +101,7 @@ onMounted(async () => {
 
 async function fetchCategories() {
   try {
-    const res = await api.get('/categories')
+    const res = await api.get(`/categories?family=${props.familyId}`)
     categories.value = res.data || []
   } catch {
     categories.value = []

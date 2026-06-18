@@ -58,11 +58,11 @@ export async function onRequestGet(context) {
     ).bind(...params).first();
     const total = countResult.total;
 
-    // Fetch items with category name and photo count
+    // Fetch items with category name and first photo url
     const offset = (page - 1) * limit;
     const items = await env.DB.prepare(
       `SELECT i.*, c.name as category_name,
-              (SELECT COUNT(*) FROM item_photos ip WHERE ip.item_id = i.id) as photo_count
+              (SELECT ip.url FROM item_photos ip WHERE ip.item_id = i.id ORDER BY ip.sort_order ASC LIMIT 1) as first_photo_url
        FROM items i
        LEFT JOIN categories c ON i.category_id = c.id
        ${whereClause}
@@ -121,14 +121,15 @@ export async function onRequestPost(context) {
     }
 
     const result = await env.DB.prepare(
-      `INSERT INTO items (storage_spot_id, name, category_id, quantity, note)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO items (storage_spot_id, name, category_id, quantity, note, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`
     ).bind(
       storage_spot_id,
       name,
       category_id || null,
       quantity || 1,
-      note || null
+      note || null,
+      user.id
     ).run();
 
     const itemId = result.meta.last_row_id;

@@ -48,12 +48,19 @@
               <h3>个人信息</h3>
               <div class="user-card">
                 <div class="user-avatar">
-                  {{ authStore.user?.nickname?.[0] || authStore.user?.email?.[0] || 'U' }}
+                  <img v-if="authStore.user?.avatar" :src="authStore.user.avatar" alt="头像" class="avatar-img" />
+                  <span v-else>{{ authStore.user?.nickname?.[0] || authStore.user?.email?.[0] || 'U' }}</span>
                 </div>
                 <div class="user-info">
                   <div class="user-name">{{ authStore.user?.nickname || '未设置昵称' }}</div>
                   <div class="user-email">{{ authStore.user?.email }}</div>
                 </div>
+                <button class="btn btn-sm btn-outline" :disabled="uploadingAvatar" @click="triggerAvatarUpload">
+                  <i v-if="uploadingAvatar" class="fa-solid fa-spinner fa-spin"></i>
+                  <i v-else class="fa-solid fa-camera"></i>
+                  {{ uploadingAvatar ? '上传中...' : '更换头像' }}
+                </button>
+                <input ref="avatarInput" type="file" accept="image/*" style="display: none;" @change="handleAvatarChange" />
               </div>
               <div class="form-group">
                 <label class="form-label" for="nickname">昵称</label>
@@ -230,6 +237,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useFamilyStore } from '@/stores/family'
 import { useToast } from '@/composables/useToast'
+import { compressImage } from '@/utils/image'
 import api from '@/api'
 import AppLayout from '@/layouts/AppLayout.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -252,6 +260,40 @@ const tabs = [
 // 个人信息
 const nickname = ref(authStore.user?.nickname || '')
 const savingProfile = ref(false)
+const uploadingAvatar = ref(false)
+const avatarInput = ref(null)
+
+watch(() => authStore.user?.nickname, (val) => {
+  nickname.value = val || ''
+})
+
+function triggerAvatarUpload() {
+  avatarInput.value.click()
+}
+
+async function handleAvatarChange(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  uploadingAvatar.value = true
+  try {
+    const compressed = await compressImage(file, 200, 0.8)
+    const avatarUrl = await new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.readAsDataURL(compressed)
+    })
+    await authStore.updateProfile({
+      name: authStore.user.nickname || authStore.user.name,
+      avatar: avatarUrl
+    })
+    showToast('头像已更新', 'success')
+  } catch (err) {
+    showToast(err.message || '头像上传失败', 'error')
+  } finally {
+    uploadingAvatar.value = false
+    e.target.value = ''
+  }
+}
 
 async function handleSaveProfile() {
   if (!nickname.value.trim()) {
@@ -341,7 +383,7 @@ const pendingDeleteCategory = ref(null)
 const isAdmin = computed(() => {
   const familyId = familyStore.currentFamilyId
   const families = familyStore.families
-  const current = families.find(f => f.id === familyId)
+  const current = families.find(f => String(f.id) === String(familyId))
   return current?.role === 'admin' || current?.is_admin
 })
 
@@ -494,8 +536,8 @@ onMounted(() => {
 }
 
 .user-avatar {
-  width: 48px;
-  height: 48px;
+  width: 60px;
+  height: 60px;
   border-radius: var(--radius-full);
   background: var(--color-primary);
   color: #FFF;
@@ -505,6 +547,20 @@ onMounted(() => {
   font-size: var(--text-xl);
   font-weight: var(--font-weight-bold);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .user-avatar {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-name {

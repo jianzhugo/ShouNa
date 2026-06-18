@@ -28,6 +28,16 @@
     <section v-else class="detail-layout">
       <!-- Left: item info -->
       <article class="detail-main">
+        <!-- Page header with name + action buttons inline -->
+        <header class="detail-header">
+          <h2>{{ item.name }}</h2>
+          <div class="detail-actions">
+            <button class="btn btn-outline" @click="openEdit"><i class="fa-solid fa-pen"></i> 编辑</button>
+            <button class="btn btn-outline" @click="openMove"><i class="fa-solid fa-arrows-up-down-left-right"></i> 移动</button>
+            <button class="btn btn-danger" @click="openDelete"><i class="fa-solid fa-trash-can"></i> 删除</button>
+          </div>
+        </header>
+
         <!-- PhotoGrid -->
         <PhotoGrid
           :photos="item.photos || []"
@@ -39,48 +49,9 @@
         />
         <input ref="fileInput" type="file" accept="image/*" style="display: none;" @change="handleFileChange" />
 
-        <!-- Name + category -->
-        <header class="detail-header">
-          <h2>{{ item.name }}</h2>
-          <span v-if="item.category_name" class="badge badge-primary">{{ item.category_name }}</span>
-          <span v-else class="badge badge-neutral">未分类</span>
-        </header>
-
         <!-- PropertyList -->
         <PropertyList :items="propertyItems" />
-
-        <!-- Note section -->
-        <section v-if="item.note" class="detail-note">
-          <h3>备注</h3>
-          <p>{{ item.note }}</p>
-        </section>
-
-        <!-- Action buttons -->
-        <div class="detail-actions">
-          <button class="btn btn-primary" @click="openEdit">
-            <i class="fa-solid fa-pen-to-square"></i> 编辑
-          </button>
-          <button class="btn btn-outline" @click="openMove">
-            <i class="fa-solid fa-arrow-right-arrow-left"></i> 移动
-          </button>
-          <button class="btn btn-danger" @click="openDelete">
-            <i class="fa-solid fa-trash-can"></i> 删除
-          </button>
-        </div>
       </article>
-
-      <!-- Right: activity log -->
-      <aside class="detail-sidebar">
-        <div class="activity-section">
-          <h3>操作记录</h3>
-          <ActivityTimeline :logs="activityLogs" />
-          <EmptyState
-            v-if="activityLogs.length === 0"
-            icon="fa-solid fa-clock-rotate-left"
-            text="暂无记录"
-          />
-        </div>
-      </aside>
     </section>
 
     <!-- Edit modal -->
@@ -132,7 +103,6 @@ import { compressImage } from '@/utils/image'
 import AppLayout from '@/layouts/AppLayout.vue'
 import PhotoGrid from '@/components/PhotoGrid.vue'
 import PropertyList from '@/components/PropertyList.vue'
-import ActivityTimeline from '@/components/ActivityTimeline.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
 import ItemForm from '@/components/ItemForm.vue'
@@ -153,7 +123,6 @@ const familyId = computed(() => {
 // Data
 const item = ref(null)
 const loading = ref(false)
-const activityLogs = ref([])
 const locationInfo = ref({
   houseId: null,
   houseName: '',
@@ -177,11 +146,14 @@ const deleteVisible = ref(false)
 const propertyItems = computed(() => {
   if (!item.value) return []
   return [
+    { label: '名称', value: item.value.name },
+    { label: '分类', value: item.value.category_name || '未分类', badge: true, badgeType: item.value.category_name ? 'primary' : 'neutral' },
     { label: '数量', value: item.value.quantity || 1 },
-    { label: '位置', value: locationInfo.value.storageName || '-', accent: true },
+    { label: '位置', value: item.value.location_path || '-', accent: true, link: item.value.storage_spot_id ? '/storage/' + item.value.storage_spot_id + '/items' : '' },
+    { label: '备注', value: item.value.note || '-' },
+    { label: '添加人', value: item.value.creator_name || '-' },
     { label: '添加时间', value: formatDate(item.value.created_at) },
     { label: '修改时间', value: formatDate(item.value.updated_at) },
-    { label: '添加人', value: item.value.creator_name || '-' }
   ]
 })
 
@@ -192,7 +164,6 @@ async function fetchItem() {
     item.value = res.data
     if (item.value) {
       fetchLocationInfo(item.value)
-      fetchActivityLogs()
     }
   } catch {
     item.value = null
@@ -201,30 +172,15 @@ async function fetchItem() {
   }
 }
 
-async function fetchLocationInfo(itemData) {
-  if (!itemData || !itemData.storage_spot_id) return
-  try {
-    const res = await api.get('/storage-spots/' + itemData.storage_spot_id)
-    const data = res.data
-    locationInfo.value = {
-      houseId: data.house_id,
-      houseName: data.house_name || '',
-      roomId: data.room_id,
-      roomName: data.room_name || '',
-      storageId: data.id,
-      storageName: data.name || ''
-    }
-  } catch {
-    locationInfo.value = { houseId: null, houseName: '', roomId: null, roomName: '', storageId: null, storageName: '' }
-  }
-}
-
-async function fetchActivityLogs() {
-  try {
-    const res = await api.get('/items/' + itemId.value + '/activities')
-    activityLogs.value = res.data || []
-  } catch {
-    activityLogs.value = []
+function fetchLocationInfo(itemData) {
+  if (!itemData) return
+  locationInfo.value = {
+    houseId: itemData.house_id || null,
+    houseName: itemData.house_name || '',
+    roomId: itemData.room_id || null,
+    roomName: itemData.room_name || '',
+    storageId: itemData.storage_spot_id || null,
+    storageName: itemData.storage_name || ''
   }
 }
 
@@ -326,7 +282,8 @@ onMounted(() => {
 .detail-header {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  justify-content: space-between;
+  gap: var(--space-4);
   margin-bottom: var(--space-6);
 }
 
@@ -335,56 +292,27 @@ onMounted(() => {
   font-weight: var(--font-weight-black);
   color: var(--color-neutral-900);
   letter-spacing: -0.5px;
-}
-
-.detail-note {
-  margin-top: var(--space-6);
-}
-
-.detail-note h3 {
-  font-size: var(--text-base);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-neutral-900);
-  margin-bottom: var(--space-2);
-}
-
-.detail-note p {
-  font-size: var(--text-sm);
-  color: var(--color-secondary);
-  line-height: 1.7;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  padding: var(--space-4);
+  margin: 0;
 }
 
 .detail-actions {
   display: flex;
   gap: var(--space-2);
-  margin-top: var(--space-6);
-}
-
-.activity-section {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  padding: var(--space-4);
-}
-
-.activity-section h3 {
-  font-size: var(--text-base);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-neutral-900);
-  margin-bottom: var(--space-3);
+  flex-shrink: 0;
 }
 
 @media (max-width: 767px) {
-  .detail-actions {
+  .detail-header {
     flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .detail-actions {
+    width: 100%;
   }
 
   .detail-actions .btn {
-    width: 100%;
+    flex: 1;
   }
 }
 </style>

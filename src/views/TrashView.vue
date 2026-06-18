@@ -188,7 +188,32 @@ async function fetchTrash() {
       url += '&type=' + activeType.value
     }
     const res = await api.get(url)
-    items.value = res.data || []
+    const data = res.data || {}
+
+    // Flatten grouped data into a single array with type property
+    const flatItems = []
+    if (data.items) {
+      data.items.forEach(i => flatItems.push({
+        ...i,
+        type: 'item',
+        original_location: [i.house_name, i.room_name, i.storage_name].filter(Boolean).join(' > ')
+      }))
+    }
+    if (data.houses) {
+      data.houses.forEach(h => flatItems.push({ ...h, type: 'house', original_location: '-' }))
+    }
+    if (data.rooms) {
+      data.rooms.forEach(r => flatItems.push({ ...r, type: 'room', original_location: r.house_name || '-' }))
+    }
+    if (data.storage) {
+      data.storage.forEach(s => flatItems.push({
+        ...s,
+        type: 'storage',
+        original_location: [s.house_name, s.room_name].filter(Boolean).join(' > ')
+      }))
+    }
+
+    items.value = flatItems
   } catch (err) {
     showToast('加载回收站失败', 'error')
   } finally {

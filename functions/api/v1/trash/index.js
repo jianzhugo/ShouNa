@@ -27,7 +27,7 @@ export async function onRequestGet(context) {
          LEFT JOIN storage_spots s ON i.storage_spot_id = s.id
          LEFT JOIN rooms r ON s.room_id = r.id
          LEFT JOIN houses h ON r.house_id = h.id
-         WHERE i.family_id = ? AND i.deleted_at IS NOT NULL
+         WHERE h.family_id = ? AND i.deleted_at IS NOT NULL
          ORDER BY i.deleted_at DESC`
       ).bind(familyId).all();
       result.items = items.results;
@@ -45,7 +45,7 @@ export async function onRequestGet(context) {
         `SELECT r.*, h.name as house_name
          FROM rooms r
          LEFT JOIN houses h ON r.house_id = h.id
-         WHERE r.family_id = ? AND r.deleted_at IS NOT NULL
+         WHERE h.family_id = ? AND r.deleted_at IS NOT NULL
          ORDER BY r.deleted_at DESC`
       ).bind(familyId).all();
       result.rooms = rooms.results;
@@ -57,7 +57,7 @@ export async function onRequestGet(context) {
          FROM storage_spots s
          LEFT JOIN rooms r ON s.room_id = r.id
          LEFT JOIN houses h ON r.house_id = h.id
-         WHERE s.family_id = ? AND s.deleted_at IS NOT NULL
+         WHERE h.family_id = ? AND s.deleted_at IS NOT NULL
          ORDER BY s.deleted_at DESC`
       ).bind(familyId).all();
       result.storage = storage.results;

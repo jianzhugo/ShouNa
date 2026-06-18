@@ -46,12 +46,14 @@ const selectedStorageId = ref('')
 
 async function fetchHouses() {
   try {
-    const res = await api.get(`/families/${props.familyId}/houses`)
+    const res = await api.get(`/houses?family=${props.familyId}`)
     houses.value = res.data || []
     if (props.defaultHouseId) {
       selectedHouseId.value = props.defaultHouseId
       await fetchRooms()
     }
+    // Emit initial location after default cascade completes
+    emitChange()
   } catch {
     houses.value = []
   }
@@ -63,12 +65,14 @@ async function fetchRooms() {
     return
   }
   try {
-    const res = await api.get(`/houses/${selectedHouseId.value}/rooms`)
+    const res = await api.get(`/rooms?house=${selectedHouseId.value}`)
     rooms.value = res.data || []
     if (props.defaultRoomId) {
       selectedRoomId.value = props.defaultRoomId
       await fetchStorages()
     }
+    // Emit after cascade completes
+    emitChange()
   } catch {
     rooms.value = []
   }
@@ -80,11 +84,13 @@ async function fetchStorages() {
     return
   }
   try {
-    const res = await api.get(`/rooms/${selectedRoomId.value}/storages`)
+    const res = await api.get(`/storage?room=${selectedRoomId.value}`)
     storages.value = res.data || []
     if (props.defaultStorageId) {
       selectedStorageId.value = props.defaultStorageId
     }
+    // Emit after cascade completes
+    emitChange()
   } catch {
     storages.value = []
   }

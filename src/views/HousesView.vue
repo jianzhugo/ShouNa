@@ -130,7 +130,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import api from '@/api'
 import { useFamilyStore } from '@/stores/family'
 import { useToast } from '@/composables/useToast'

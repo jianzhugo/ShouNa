@@ -26,6 +26,7 @@ const props = defineProps({
 const emit = defineEmits(['confirm', 'cancel', 'update:visible'])
 
 function handleConfirm() {
+  emit('update:visible', false)
   emit('confirm')
 }
 

@@ -152,8 +152,9 @@
             />
             <ul v-else class="member-list">
               <li v-for="member in data.members" :key="member.id" class="member-item">
-                <div class="member-avatar" :style="{ background: 'var(--color-primary)' }">
-                  {{ member.nickname?.[0] || member.email?.[0] || 'U' }}
+                <div class="member-avatar" :style="{ background: member.avatar ? 'transparent' : 'var(--color-primary)' }">
+                  <img v-if="member.avatar" :src="member.avatar" :alt="member.nickname" class="avatar-img" />
+                  <template v-else>{{ member.nickname?.[0] || member.email?.[0] || 'U' }}</template>
                 </div>
                 <div class="member-info">
                   <span class="member-name">{{ member.nickname || member.email }}</span>
@@ -195,6 +196,10 @@ async function fetchData() {
   error.value = ''
   try {
     const res = await api.get('/dashboard?family=' + familyStore.currentFamilyId)
+    // Map member name -> nickname for display
+    if (res.data?.members) {
+      res.data.members = res.data.members.map(m => ({ ...m, nickname: m.name || m.nickname }))
+    }
     data.value = res.data
   } catch (err) {
     error.value = err.message || '加载失败，请稍后重试'
@@ -375,6 +380,13 @@ watch(() => familyStore.currentFamilyId, () => {
   font-weight: var(--font-weight-bold);
   color: #FFF;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.member-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .member-info {

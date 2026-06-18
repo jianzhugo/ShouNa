@@ -50,11 +50,12 @@ export async function onRequestGet(context) {
     ).bind(...params).first();
     const total = countResult.total;
 
-    // Fetch items with full location path
+    // Fetch items with full location path and first photo url
     const offset = (page - 1) * limit;
     const items = await env.DB.prepare(
       `SELECT i.*, c.name as category_name,
-              h.name as house_name, r.name as room_name, s.name as storage_name
+              h.name as house_name, r.name as room_name, s.name as storage_name,
+              (SELECT ip.url FROM item_photos ip WHERE ip.item_id = i.id ORDER BY ip.sort_order ASC LIMIT 1) as first_photo_url
        FROM items i
        LEFT JOIN categories c ON i.category_id = c.id
        JOIN storage_spots s ON i.storage_spot_id = s.id

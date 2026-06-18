@@ -11,10 +11,33 @@ export async function onRequestGet(context) {
 
     const url = new URL(request.url);
     const roomId = url.searchParams.get('room');
-    if (!roomId) {
-      return errorResponse('MISSING_PARAMS', '缺少 room 参数');
+    const familyId = url.searchParams.get('family');
+
+    if (!roomId && !familyId) {
+      return errorResponse('MISSING_PARAMS', '缺少 room 或 family 参数');
     }
 
+    // 按 family 查询：返回家庭所有收纳位（含房间和住所名称）
+    if (familyId) {
+      const membership = await isFamilyMember(env.DB, user.id, familyId);
+      if (!membership) {
+        return errorResponse('FORBIDDEN', '无权访问该家庭', 403);
+      }
+
+      const storageSpots = await env.DB.prepare(
+        `SELECT s.id, s.name, s.room_id, s.created_at, r.name as room_name, r.house_id, h.name as house_name,
+          (SELECT COUNT(*) FROM items i WHERE i.storage_spot_id = s.id AND i.deleted_at IS NULL) as item_count
+         FROM storage_spots s
+         JOIN rooms r ON s.room_id = r.id
+         JOIN houses h ON r.house_id = h.id
+         WHERE h.family_id = ? AND s.deleted_at IS NULL AND r.deleted_at IS NULL AND h.deleted_at IS NULL
+         ORDER BY h.name, r.name, s.created_at DESC`
+      ).bind(familyId).all();
+
+      return jsonResponse({ data: storageSpots.results });
+    }
+
+    // 按 room 查询：原有逻辑
     const room = await env.DB.prepare(
       'SELECT r.id, h.family_id FROM rooms r JOIN houses h ON r.house_id = h.id WHERE r.id = ? AND r.deleted_at IS NULL'
     ).bind(roomId).first();

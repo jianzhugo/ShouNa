@@ -13,19 +13,32 @@
           <i class="fa-solid fa-house"></i>
           <span>仪表盘</span>
         </router-link>
+        <router-link to="/items" class="sidebar-item" active-class="active">
+          <i class="fa-solid fa-boxes-stacked"></i>
+          <span>物品列表</span>
+        </router-link>
+        <div class="sidebar-section-title">数据</div>
         <router-link to="/houses" class="sidebar-item" active-class="active">
           <i class="fa-solid fa-building"></i>
-          <span>房屋管理</span>
+          <span>住所</span>
         </router-link>
-        <router-link to="/search" class="sidebar-item" active-class="active">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <span>搜索物品</span>
+        <router-link to="/rooms" class="sidebar-item" active-class="active">
+          <i class="fa-solid fa-door-open"></i>
+          <span>房间</span>
         </router-link>
-        <div class="sidebar-section-title">管理</div>
+        <router-link to="/storage" class="sidebar-item" active-class="active">
+          <i class="fa-solid fa-box-open"></i>
+          <span>收纳位</span>
+        </router-link>
         <router-link to="/families" class="sidebar-item" active-class="active">
           <i class="fa-solid fa-people-group"></i>
           <span>家庭管理</span>
         </router-link>
+        <router-link v-if="currentFamilyId" :to="`/families/${currentFamilyId}/members`" class="sidebar-item" active-class="active">
+          <i class="fa-solid fa-users"></i>
+          <span>成员管理</span>
+        </router-link>
+        <div class="sidebar-section-title">系统</div>
         <router-link to="/trash" class="sidebar-item" active-class="active">
           <i class="fa-solid fa-trash-can"></i>
           <span>回收站</span>
@@ -52,28 +65,24 @@
           <span class="sep">/</span>
           <span class="current">{{ $route.meta.title || $route.name }}</span>
         </nav>
-        <div class="toolbar-spacer"></div>
-        <router-link to="/search" class="toolbar-search">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <span>搜索物品...</span>
-        </router-link>
       </header>
       <main class="app-scroll">
         <slot />
       </main>
     </div>
+    <ToastNotification />
     <nav class="app-tab-bar">
       <router-link to="/" class="tab-item" active-class="active">
         <i class="fa-solid fa-house"></i>
         <span>首页</span>
       </router-link>
-      <router-link to="/houses" class="tab-item" active-class="active">
-        <i class="fa-solid fa-building"></i>
-        <span>房屋</span>
+      <router-link to="/items" class="tab-item" active-class="active">
+        <i class="fa-solid fa-boxes-stacked"></i>
+        <span>物品</span>
       </router-link>
-      <router-link to="/search" class="tab-item add-btn">
+      <router-link to="/houses" class="tab-item add-btn">
         <i class="fa-solid fa-circle-plus"></i>
-        <span>搜索</span>
+        <span>添加</span>
       </router-link>
       <router-link to="/trash" class="tab-item" active-class="active">
         <i class="fa-solid fa-trash-can"></i>
@@ -88,6 +97,17 @@
 </template>
 
 <script setup>
+import { computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useFamilyStore } from '@/stores/family'
+import ToastNotification from '@/components/ToastNotification.vue'
 const authStore = useAuthStore()
+const familyStore = useFamilyStore()
+const currentFamilyId = computed(() => familyStore.currentFamilyId)
+
+onMounted(async () => {
+  if (!currentFamilyId.value) {
+    await familyStore.fetchFamilies()
+  }
+})
 </script>

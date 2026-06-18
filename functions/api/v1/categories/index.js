@@ -1,7 +1,9 @@
-import { getAuthUser, isFamilyMember, isFamilyAdmin, jsonResponse, errorResponse, logActivity } from '../utils';
+import { getAuthUser, isFamilyMember, isFamilyAdmin, jsonResponse, errorResponse, logActivity, ensureSchema } from '../utils';
 
 export async function onRequestGet(context) {
   const { request, env } = context;
+
+  await ensureSchema(env.DB);
 
   const user = await getAuthUser(request, env);
   if (!user) return errorResponse('UNAUTHORIZED', '未登录', 401);

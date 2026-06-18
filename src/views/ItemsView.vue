@@ -10,20 +10,21 @@
       <span v-if="locationNames.roomName" class="sep">/</span>
       <router-link v-if="locationNames.storageName" :to="'/storage/' + storageId + '/items'">{{ locationNames.storageName }}</router-link>
       <span v-if="locationNames.storageName" class="sep">/</span>
-      <span class="current">物品</span>
+      <span class="current">{{ isStorageMode ? '物品' : '物品搜索' }}</span>
     </nav>
 
     <!-- Mobile header -->
     <header class="mobile-header">
-      <h2>物品管理</h2>
-      <p v-if="locationNames.storageName">{{ locationNames.storageName }}</p>
+      <h2>{{ isStorageMode ? '物品管理' : '物品搜索' }}</h2>
+      <p v-if="isStorageMode && locationNames.storageName">{{ locationNames.storageName }}</p>
+      <p v-else-if="!isStorageMode">搜索家庭中的所有物品</p>
     </header>
 
     <!-- PC toolbar -->
     <template v-if="false"><!-- handled by AppLayout breadcrumb --></template>
 
     <!-- SearchBar -->
-    <SearchBar v-model="searchQuery" placeholder="搜索物品名称..." @search="fetchItems" />
+    <SearchBar v-model="searchQuery" :placeholder="isStorageMode ? '搜索物品名称...' : '搜索物品名称、分类、位置...'" @search="handleSearch" />
 
     <!-- FilterChips -->
     <FilterChips :items="filterItems" :active-id="activeCategory" @filter="handleFilter" />
@@ -33,10 +34,16 @@
 
     <!-- Empty -->
     <EmptyState
+      v-else-if="items.length === 0 && !isStorageMode && !searchQuery.trim() && !activeCategory"
+      icon="fa-solid fa-magnifying-glass"
+      text="搜索家庭中的所有物品"
+      hint="输入关键词或选择分类开始搜索"
+    />
+    <EmptyState
       v-else-if="items.length === 0"
       icon="fa-solid fa-box-open"
-      text="暂无物品"
-      hint="点击添加物品开始收纳管理"
+      :text="isStorageMode ? '暂无物品' : '未找到匹配的物品'"
+      :hint="isStorageMode ? '点击添加物品开始收纳管理' : '试试其他关键词或分类'"
     />
 
     <!-- PC: data table -->
@@ -45,6 +52,7 @@
         <tr>
           <th>物品</th>
           <th>分类</th>
+          <th v-if="!isStorageMode">位置</th>
           <th>数量</th>
           <th>备注</th>
           <th>添加时间</th>
@@ -56,20 +64,23 @@
           <td>
             <router-link :to="'/items/' + item.id" class="table-name-cell">
               <img
-                v-if="item.photos && item.photos.length > 0"
-                :src="item.photos[0].url"
+                v-if="item.first_photo_url"
+                :src="item.first_photo_url"
                 :alt="item.name"
                 class="table-thumb"
               />
-              <div v-else class="table-thumb" style="display: flex; align-items: center; justify-content: center;">
-                <i class="fa-solid fa-box" style="color: var(--color-secondary); font-size: var(--text-sm);"></i>
+              <div v-else class="table-thumb table-thumb-icon" :style="{ background: getCategoryColor(item.category_name).bg }">
+                <i :class="getCategoryIcon(item.category_name)" :style="{ color: getCategoryColor(item.category_name).color }"></i>
               </div>
-              <span>{{ item.name }}</span>
+              <span v-html="highlightText(item.name)"></span>
             </router-link>
           </td>
           <td>
             <span v-if="item.category_name" class="badge badge-primary">{{ item.category_name }}</span>
             <span v-else class="badge badge-neutral">未分类</span>
+          </td>
+          <td v-if="!isStorageMode" style="font-size: var(--text-xs); color: var(--color-secondary);">
+            {{ item.location_path || '-' }}
           </td>
           <td>{{ item.quantity || 1 }}</td>
           <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ item.note || '-' }}</td>
@@ -100,19 +111,23 @@
         class="mobile-item-card"
       >
         <img
-          v-if="item.photos && item.photos.length > 0"
-          :src="item.photos[0].url"
+          v-if="item.first_photo_url"
+          :src="item.first_photo_url"
           :alt="item.name"
           class="mobile-item-thumb"
         />
-        <div v-else class="mobile-item-icon">
-          <i class="fa-solid fa-box"></i>
+        <div v-else class="mobile-item-icon" :style="{ background: getCategoryColor(item.category_name).bg }">
+          <i :class="getCategoryIcon(item.category_name)" :style="{ color: getCategoryColor(item.category_name).color }"></i>
         </div>
         <div class="mobile-item-info">
-          <div class="mobile-item-name">{{ item.name }}</div>
+          <div class="mobile-item-name" v-html="highlightText(item.name)"></div>
           <div class="mobile-item-meta">
             <span v-if="item.category_name" class="badge badge-primary">{{ item.category_name }}</span>
             <span class="mobile-item-qty">x{{ item.quantity || 1 }}</span>
+          </div>
+          <div v-if="!isStorageMode && item.location_path" class="mobile-item-location">
+            <i class="fa-solid fa-location-dot"></i>
+            {{ item.location_path }}
           </div>
         </div>
         <i class="fa-solid fa-chevron-right mobile-item-arrow"></i>
@@ -129,7 +144,7 @@
     />
 
     <!-- FAB (mobile) -->
-    <button class="fab" @click="openAdd">
+    <button v-if="isStorageMode" class="fab" @click="openAdd">
       <i class="fa-solid fa-plus"></i>
     </button>
 
@@ -141,6 +156,8 @@
           <ItemForm
             :item="editingItem"
             :family-id="familyId"
+            :default-house-id="Number(locationNames.houseId)"
+            :default-room-id="Number(locationNames.roomId)"
             :default-storage-id="Number(storageId)"
             @save="handleFormSave"
             @cancel="formVisible = false"
@@ -190,7 +207,46 @@ const route = useRoute()
 const familyStore = useFamilyStore()
 const { show } = useToast()
 
+const CATEGORY_ICONS = {
+  '衣物': 'fa-solid fa-shirt',
+  '数码': 'fa-solid fa-laptop',
+  '证件': 'fa-solid fa-id-card',
+  '药品': 'fa-solid fa-pills',
+  '工具': 'fa-solid fa-wrench',
+  '书籍': 'fa-solid fa-book',
+  '日用': 'fa-solid fa-pump-soap',
+  '食品': 'fa-solid fa-utensils',
+  '玩具': 'fa-solid fa-puzzle-piece',
+  '运动': 'fa-solid fa-dumbbell',
+  '文具': 'fa-solid fa-pen',
+  '厨具': 'fa-solid fa-kitchen-set',
+}
+
+const CATEGORY_COLORS = {
+  '衣物': { bg: '#FDF2F8', color: '#DB2777' },
+  '数码': { bg: '#EFF6FF', color: '#3B82F6' },
+  '证件': { bg: '#FFF7ED', color: '#EA580C' },
+  '药品': { bg: '#F0FDF4', color: '#16A34A' },
+  '工具': { bg: '#FFF1EB', color: '#E8743B' },
+  '书籍': { bg: '#EDE9FE', color: '#7C3AED' },
+  '日用': { bg: '#F3F4F6', color: '#6B7280' },
+  '食品': { bg: '#FEF3C7', color: '#D97706' },
+  '玩具': { bg: '#FDF2F8', color: '#EC4899' },
+  '运动': { bg: '#ECFDF5', color: '#059669' },
+  '文具': { bg: '#EFF6FF', color: '#2563EB' },
+  '厨具': { bg: '#FEF3C7', color: '#B45309' },
+}
+
+function getCategoryIcon(categoryName) {
+  return CATEGORY_ICONS[categoryName] || 'fa-solid fa-box'
+}
+
+function getCategoryColor(categoryName) {
+  return CATEGORY_COLORS[categoryName] || { bg: 'var(--color-primary-light)', color: 'var(--color-primary)' }
+}
+
 const storageId = computed(() => route.params.storageId)
+const isStorageMode = computed(() => !!storageId.value)
 const familyId = computed(() => {
   const id = familyStore.currentFamilyId
   return id ? Number(id) : 0
@@ -234,9 +290,17 @@ const filterItems = computed(() => {
   return all.concat(categories.value.map(c => ({ id: c.id, name: c.name })))
 })
 
+function highlightText(text) {
+  if (!text || !searchQuery.value) return text || ''
+  const escaped = searchQuery.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escaped})`, 'gi')
+  return text.replace(regex, '<span class="highlight">$1</span>')
+}
+
 async function fetchLocationInfo() {
+  if (!storageId.value) return
   try {
-    const res = await api.get('/storage-spots/' + storageId.value)
+    const res = await api.get('/storage/' + storageId.value)
     const data = res.data
     locationNames.value = {
       houseId: data.house_id,
@@ -263,23 +327,41 @@ async function fetchCategories() {
 async function fetchItems() {
   loading.value = true
   try {
-    const params = new URLSearchParams({
-      storage: storageId.value,
-      page: page.value,
-      limit: limit.value
-    })
-    if (searchQuery.value) params.set('q', searchQuery.value)
-    if (activeCategory.value) params.set('category', activeCategory.value)
+    let res
+    if (isStorageMode.value) {
+      // Storage mode: fetch items in specific storage spot
+      const params = new URLSearchParams({
+        storage: storageId.value,
+        page: page.value,
+        limit: limit.value
+      })
+      if (searchQuery.value) params.set('q', searchQuery.value)
+      if (activeCategory.value) params.set('category', activeCategory.value)
 
-    const res = await api.get('/items?' + params.toString())
-    items.value = res.data || []
-    total.value = res.total || 0
+      res = await api.get('/items?' + params.toString())
+      items.value = res.data || []
+      total.value = res.pagination?.total || 0
+    } else {
+      // Search mode: fetch items across family
+      let url = '/items/search?family=' + familyId.value + '&q=' + encodeURIComponent(searchQuery.value.trim()) + '&page=' + page.value + '&limit=' + limit.value
+      if (activeCategory.value) {
+        url += '&category=' + activeCategory.value
+      }
+      res = await api.get(url)
+      items.value = res.data || []
+      total.value = res.pagination?.total || 0
+    }
   } catch {
     items.value = []
     total.value = 0
   } finally {
     loading.value = false
   }
+}
+
+function handleSearch() {
+  page.value = 1
+  fetchItems()
 }
 
 function handleFilter(categoryId) {
@@ -375,6 +457,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.table-thumb-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-lg);
+}
+
 .mobile-item-list {
   display: none;
 }
@@ -421,11 +510,9 @@ onMounted(() => {
   width: 44px;
   height: 44px;
   border-radius: var(--radius-md);
-  background: var(--color-primary-light);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-primary);
   font-size: var(--text-lg);
   flex-shrink: 0;
 }
@@ -454,6 +541,19 @@ onMounted(() => {
 .mobile-item-qty {
   font-size: var(--text-xs);
   color: var(--color-secondary);
+}
+
+.mobile-item-location {
+  font-size: var(--text-xs);
+  color: var(--color-secondary);
+  margin-top: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.mobile-item-location i {
+  font-size: 10px;
 }
 
 .mobile-item-arrow {

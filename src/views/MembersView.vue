@@ -68,8 +68,9 @@
               <tr v-for="member in members" :key="member.id">
                 <td>
                   <div class="table-name-cell">
-                    <div class="member-avatar" :style="{ background: 'var(--color-primary)' }">
-                      {{ member.nickname?.[0] || member.email?.[0] || 'U' }}
+                    <div class="member-avatar" :style="{ background: member.avatar ? 'transparent' : 'var(--color-primary)' }">
+                      <img v-if="member.avatar" :src="member.avatar" :alt="member.nickname" class="avatar-img" />
+                      <template v-else>{{ member.nickname?.[0] || member.email?.[0] || 'U' }}</template>
                     </div>
                     <div>
                       <div class="member-name">{{ member.nickname || member.email }}</div>
@@ -100,8 +101,9 @@
           <ul class="mobile-member-list">
             <li v-for="member in members" :key="member.id" class="mobile-member-card">
               <div class="mobile-member-top">
-                <div class="member-avatar" :style="{ background: 'var(--color-primary)' }">
-                  {{ member.nickname?.[0] || member.email?.[0] || 'U' }}
+                <div class="member-avatar" :style="{ background: member.avatar ? 'transparent' : 'var(--color-primary)' }">
+                  <img v-if="member.avatar" :src="member.avatar" :alt="member.nickname" class="avatar-img" />
+                  <template v-else>{{ member.nickname?.[0] || member.email?.[0] || 'U' }}</template>
                 </div>
                 <div class="mobile-member-info">
                   <div class="member-name">{{ member.nickname || member.email }}</div>
@@ -177,7 +179,7 @@ const removeTarget = ref(null)
 const familyId = computed(() => route.params.id)
 const currentUserId = computed(() => authStore.user?.id)
 const isAdmin = computed(() => {
-  const current = members.value.find(m => m.id === currentUserId.value)
+  const current = members.value.find(m => String(m.id) === String(currentUserId.value))
   return current?.role === 'admin'
 })
 
@@ -187,8 +189,33 @@ async function fetchMembers() {
   error.value = ''
   try {
     const res = await api.get('/families/' + familyId.value + '/members')
-    members.value = res.data.members || res.data
-    inviteInfo.value = res.data.invite || null
+    // Map API fields: user_id -> id, name -> nickname
+    const rawMembers = res.data?.members || res.data || []
+    members.value = rawMembers.map(m => ({
+      id: m.user_id || m.id,
+      nickname: m.name || m.nickname,
+      email: m.email,
+      avatar: m.avatar,
+      role: m.role,
+      joined_at: m.joined_at
+    }))
+
+    // Fetch invite info from family details
+    try {
+      const familyRes = await api.get('/families')
+      const families = familyRes.data || []
+      const currentFamily = families.find(f => String(f.id) === String(familyId.value))
+      if (currentFamily?.invite_code) {
+        inviteInfo.value = {
+          code: currentFamily.invite_code,
+          expires_at: currentFamily.invite_code_expires_at,
+          max_uses: currentFamily.invite_code_max_uses,
+          used_count: currentFamily.invite_code_used_count
+        }
+      }
+    } catch {
+      // Invite info fetch failed, continue without it
+    }
   } catch (err) {
     error.value = err.message || '加载失败，请稍后重试'
   } finally {
@@ -209,7 +236,13 @@ async function handleCopyCode() {
 async function handleResetInvite() {
   try {
     const res = await api.post('/families/' + familyId.value + '/reset-invite')
-    inviteInfo.value = res.data.invite || res.data
+    const data = res.data || res
+    inviteInfo.value = {
+      code: data.invite_code,
+      expires_at: data.invite_code_expires_at,
+      max_uses: data.invite_code_max_uses,
+      used_count: data.invite_code_used_count
+    }
     toast.show('邀请码已重置', 'success')
   } catch (err) {
     toast.show(err.message || '重置失败', 'error')
@@ -274,6 +307,13 @@ onMounted(fetchMembers)
   font-weight: var(--font-weight-bold);
   color: #FFF;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.member-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .member-name {
