@@ -9,11 +9,14 @@ export async function onRequestDelete(context) {
   try {
     const { id } = params;
 
-    // Get photo and verify ownership through item -> family chain
+    // Get photo and verify ownership through item -> storage_spots -> rooms -> houses chain
     const photo = await env.DB.prepare(
-      `SELECT ip.*, i.family_id, i.id as item_id
+      `SELECT ip.*, h.family_id
        FROM item_photos ip
        JOIN items i ON ip.item_id = i.id
+       JOIN storage_spots s ON i.storage_spot_id = s.id
+       JOIN rooms r ON s.room_id = r.id
+       JOIN houses h ON r.house_id = h.id
        WHERE ip.id = ?`
     ).bind(id).first();
 

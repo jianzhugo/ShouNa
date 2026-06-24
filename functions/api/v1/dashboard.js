@@ -49,11 +49,10 @@ export async function onRequestGet(context) {
 
     // Recent items with location path and category
     const recentItems = await env.DB.prepare(
-      `SELECT i.id, i.name, i.created_at,
-              c.name as category_name,
-              h.name as house_name,
-              r.name as room_name,
-              s.name as storage_name
+      `SELECT i.id, i.name, i.quantity, i.created_at, i.updated_at,
+              c.name as category,
+              h.name || ' > ' || r.name || ' > ' || s.name as location,
+              (SELECT ip.url FROM item_photos ip WHERE ip.item_id = i.id ORDER BY ip.sort_order ASC LIMIT 1) as first_photo_url
        FROM items i
        LEFT JOIN categories c ON i.category_id = c.id
        LEFT JOIN storage_spots s ON i.storage_spot_id = s.id

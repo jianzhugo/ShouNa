@@ -143,11 +143,6 @@
       @change="handlePageChange"
     />
 
-    <!-- FAB (mobile) -->
-    <button v-if="isStorageMode" class="fab" @click="openAdd">
-      <i class="fa-solid fa-plus"></i>
-    </button>
-
     <!-- Add/Edit modal -->
     <Teleport to="body">
       <div v-if="formVisible" class="modal-overlay" @click.self="formVisible = false">
@@ -193,6 +188,7 @@ import { useRoute } from 'vue-router'
 import api from '@/api'
 import { useFamilyStore } from '@/stores/family'
 import { useToast } from '@/composables/useToast'
+import { useFab } from '@/composables/useFab'
 import AppLayout from '@/layouts/AppLayout.vue'
 import SearchBar from '@/components/SearchBar.vue'
 import FilterChips from '@/components/FilterChips.vue'
@@ -206,6 +202,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 const route = useRoute()
 const familyStore = useFamilyStore()
 const { show } = useToast()
+const { pendingAction, clearAction } = useFab()
 
 const CATEGORY_ICONS = {
   '衣物': 'fa-solid fa-shirt',
@@ -380,6 +377,14 @@ function openAdd() {
   formVisible.value = true
 }
 
+// 监听 FAB 动作：在收纳位物品页直接打开添加物品表单
+watch(pendingAction, (action) => {
+  if (action === 'add-item' && isStorageMode.value) {
+    openAdd()
+    clearAction()
+  }
+})
+
 function openEdit(item) {
   editingItem.value = { ...item }
   formVisible.value = true
@@ -398,11 +403,22 @@ function openDelete(item) {
 
 async function handleFormSave(formData) {
   try {
+    // If custom storage name provided, create the storage spot first
+    let storageSpotId = formData.storage_spot_id
+    if (!storageSpotId && formData.custom_storage_name && formData.room_id) {
+      const res = await api.post('/storage', { room_id: formData.room_id, name: formData.custom_storage_name })
+      storageSpotId = res.data.id
+    }
+
+    const saveData = { ...formData, storage_spot_id: storageSpotId }
+    delete saveData.custom_storage_name
+    delete saveData.deletedPhotoIds
+
     if (editingItem.value) {
-      await api.put('/items/' + editingItem.value.id, formData)
+      await api.put('/items/' + editingItem.value.id, saveData)
       show('物品已更新', 'success')
     } else {
-      await api.post('/items', formData)
+      await api.post('/items', saveData)
       show('物品已添加', 'success')
     }
     formVisible.value = false

@@ -10,7 +10,7 @@
       <span v-if="locationInfo.roomName" class="sep">/</span>
       <router-link v-if="locationInfo.storageName" :to="'/storage/' + locationInfo.storageId + '/items'">{{ locationInfo.storageName }}</router-link>
       <span v-if="locationInfo.storageName" class="sep">/</span>
-      <span class="current">{{ item.name || '物品详情' }}</span>
+      <span class="current">{{ item?.name || '物品详情' }}</span>
     </nav>
 
     <!-- Loading -->
@@ -198,7 +198,39 @@ function openDelete() {
 
 async function handleFormSave(formData) {
   try {
-    await api.put('/items/' + itemId.value, formData)
+    // Handle new photo uploads
+    const newPhotos = formData.photos?.filter(p => p.isNew && p.file) || []
+    for (const photo of newPhotos) {
+      const photoFormData = new FormData()
+      photoFormData.append('photo', photo.file, 'photo.jpg')
+      await api.upload('/items/' + itemId.value + '/photos', photoFormData)
+    }
+
+    // Handle deleted photos
+    const deletedIds = formData.deletedPhotoIds || []
+    for (const photoId of deletedIds) {
+      await api.del('/photos/' + photoId)
+    }
+
+    // If custom storage name provided, create the storage spot first
+    let storageSpotId = formData.storage_spot_id
+    if (!storageSpotId && formData.custom_storage_name && formData.room_id) {
+      const res = await api.post('/storage', { room_id: formData.room_id, name: formData.custom_storage_name })
+      storageSpotId = res.data.id
+    }
+
+    // Update item basic info (without photos array)
+    const updateData = {
+      name: formData.name,
+      category_id: formData.category_id,
+      quantity: formData.quantity,
+      note: formData.note,
+      storage_spot_id: storageSpotId,
+      house_id: formData.house_id,
+      room_id: formData.room_id
+    }
+    await api.put('/items/' + itemId.value, updateData)
+
     show('物品已更新', 'success')
     formVisible.value = false
     fetchItem()
@@ -248,7 +280,7 @@ async function handleFileChange(e) {
 
 async function handlePhotoDelete(photoId) {
   try {
-    await api.del('/items/' + itemId.value + '/photos/' + photoId)
+    await api.del('/photos/' + photoId)
     show('照片已删除', 'success')
     fetchItem()
   } catch (err) {

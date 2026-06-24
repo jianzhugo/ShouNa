@@ -16,10 +16,19 @@
     </div>
     <div class="form-group">
       <label class="form-label">收纳位置</label>
-      <select class="form-select" v-model="selectedStorageId" :disabled="!selectedRoomId">
-        <option value="">请选择收纳位置</option>
-        <option v-for="storage in storages" :key="storage.id" :value="storage.id">{{ storage.name }}</option>
-      </select>
+      <template v-if="isCustomStorage">
+        <div class="custom-storage-wrapper">
+          <input class="form-input" v-model="customStorageName" placeholder="输入新的收纳位置名称" />
+          <button type="button" class="custom-storage-back" @click="cancelCustomStorage" title="返回选择">✕</button>
+        </div>
+      </template>
+      <template v-else>
+        <select class="form-select" v-model="selectedStorageId" :disabled="!selectedRoomId" @change="onStorageChange">
+          <option value="">请选择收纳位置</option>
+          <option v-for="storage in storages" :key="storage.id" :value="storage.id">{{ storage.name }}</option>
+          <option v-if="selectedRoomId" value="__custom__">+ 自定义输入</option>
+        </select>
+      </template>
     </div>
   </div>
 </template>
@@ -43,6 +52,8 @@ const storages = ref([])
 const selectedHouseId = ref('')
 const selectedRoomId = ref('')
 const selectedStorageId = ref('')
+const isCustomStorage = ref(false)
+const customStorageName = ref('')
 
 async function fetchHouses() {
   try {
@@ -52,7 +63,6 @@ async function fetchHouses() {
       selectedHouseId.value = props.defaultHouseId
       await fetchRooms()
     }
-    // Emit initial location after default cascade completes
     emitChange()
   } catch {
     houses.value = []
@@ -71,7 +81,6 @@ async function fetchRooms() {
       selectedRoomId.value = props.defaultRoomId
       await fetchStorages()
     }
-    // Emit after cascade completes
     emitChange()
   } catch {
     rooms.value = []
@@ -89,7 +98,6 @@ async function fetchStorages() {
     if (props.defaultStorageId) {
       selectedStorageId.value = props.defaultStorageId
     }
-    // Emit after cascade completes
     emitChange()
   } catch {
     storages.value = []
@@ -99,6 +107,8 @@ async function fetchStorages() {
 function onHouseChange() {
   selectedRoomId.value = ''
   selectedStorageId.value = ''
+  isCustomStorage.value = false
+  customStorageName.value = ''
   rooms.value = []
   storages.value = []
   fetchRooms()
@@ -107,23 +117,43 @@ function onHouseChange() {
 
 function onRoomChange() {
   selectedStorageId.value = ''
+  isCustomStorage.value = false
+  customStorageName.value = ''
   storages.value = []
   fetchStorages()
   emitChange()
 }
 
+function onStorageChange() {
+  if (selectedStorageId.value === '__custom__') {
+    isCustomStorage.value = true
+    selectedStorageId.value = ''
+    customStorageName.value = ''
+  }
+  emitChange()
+}
+
+function cancelCustomStorage() {
+  isCustomStorage.value = false
+  customStorageName.value = ''
+  emitChange()
+}
+
 function emitChange() {
+  const storageId = isCustomStorage.value ? null : (selectedStorageId.value || null)
+  const customName = isCustomStorage.value ? (customStorageName.value?.trim() || null) : null
   emit('update:houseId', selectedHouseId.value || null)
   emit('update:roomId', selectedRoomId.value || null)
-  emit('update:storageId', selectedStorageId.value || null)
+  emit('update:storageId', storageId)
   emit('change', {
     houseId: selectedHouseId.value || null,
     roomId: selectedRoomId.value || null,
-    storageId: selectedStorageId.value || null
+    storageId,
+    customStorageName: customName
   })
 }
 
-watch(selectedStorageId, () => {
+watch(customStorageName, () => {
   emitChange()
 })
 
@@ -131,3 +161,37 @@ onMounted(() => {
   fetchHouses()
 })
 </script>
+
+<style scoped>
+.custom-storage-wrapper {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.custom-storage-wrapper .form-input {
+  flex: 1;
+}
+
+.custom-storage-back {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-neutral-300, #d1d5db);
+  border-radius: 6px;
+  background: var(--color-neutral-50, #f9fafb);
+  color: var(--color-neutral-500, #6b7280);
+  cursor: pointer;
+  font-size: var(--text-sm, 14px);
+  line-height: 1;
+  padding: 0;
+}
+
+.custom-storage-back:hover {
+  background: var(--color-neutral-100, #f3f4f6);
+  color: var(--color-neutral-700, #374151);
+}
+</style>

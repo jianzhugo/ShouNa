@@ -65,21 +65,6 @@
         </AppCard>
       </div>
 
-      <!-- FAB (mobile) -->
-      <button class="fab" @click="fabOpen = !fabOpen" aria-label="添加">
-        <i :class="fabOpen ? 'fa-solid fa-xmark' : 'fa-solid fa-plus'"></i>
-      </button>
-      <div v-if="fabOpen" class="fab-menu">
-        <button class="fab-menu-item add-current" @click="showAddModal = true; fabOpen = false">
-          <i class="fa-solid fa-box-archive"></i>
-          添加收纳位
-        </button>
-        <button class="fab-menu-item add-item" @click="showItemForm = true; fabOpen = false">
-          <i class="fa-solid fa-box"></i>
-          直接添加物品
-        </button>
-      </div>
-
       <!-- Add storage modal -->
       <Teleport to="body">
         <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">
@@ -125,27 +110,12 @@
         @confirm="deleteStorage"
       />
 
-      <!-- Item form bottom sheet -->
-      <Teleport to="body">
-        <div v-if="showItemForm" class="bottom-sheet-overlay" @click.self="showItemForm = false"></div>
-        <div v-if="showItemForm" class="bottom-sheet">
-          <div class="sheet-handle"></div>
-          <h3>添加物品</h3>
-          <ItemForm
-            :family-id="familyId"
-            :default-house-id="Number(houseId)"
-            :default-room-id="Number(roomId)"
-            @save="onItemSave"
-            @cancel="showItemForm = false"
-          />
-        </div>
-      </Teleport>
     </section>
   </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
 import { useFamilyStore } from '@/stores/family'
@@ -155,7 +125,7 @@ import AppCard from '@/components/AppCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import ItemForm from '@/components/ItemForm.vue'
+import { useFab } from '@/composables/useFab'
 
 const route = useRoute()
 const familyStore = useFamilyStore()
@@ -173,8 +143,7 @@ const showAddModal = ref(false)
 const newStorageName = ref('')
 const showDeleteConfirm = ref(false)
 const deleteTarget = ref(null)
-const fabOpen = ref(false)
-const showItemForm = ref(false)
+const { pendingAction, clearAction } = useFab()
 
 const STORAGE_COLORS = {
   '衣柜': { bg: '#FFF1EB', color: 'var(--color-primary)' },
@@ -275,15 +244,12 @@ async function deleteStorage() {
   }
 }
 
-async function onItemSave(itemData) {
-  try {
-    await api.post('/items', itemData)
-    showItemForm.value = false
-    showToast('物品添加成功')
-  } catch {
-    showToast('添加物品失败', 'error')
+watch(pendingAction, (action) => {
+  if (action === 'add-current') {
+    showAddModal.value = true
+    clearAction()
   }
-}
+})
 
 onMounted(() => {
   fetchRoomInfo()

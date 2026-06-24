@@ -60,7 +60,6 @@ import LocationSelector from './LocationSelector.vue'
 
 const props = defineProps({
   item: { type: Object, default: null },
-  storageSpotId: { type: Number, default: null },
   familyId: { type: Number, required: true },
   defaultHouseId: { type: Number, default: null },
   defaultRoomId: { type: Number, default: null },
@@ -83,6 +82,9 @@ const form = ref({
   storageId: null
 })
 
+// Track deleted photo IDs for backend handling
+const deletedPhotoIds = ref([])
+
 const locationData = ref({ houseId: null, roomId: null, storageId: null })
 
 onMounted(async () => {
@@ -93,8 +95,8 @@ onMounted(async () => {
     form.value.note = props.item.note || ''
     form.value.photos = (props.item.photos || []).map(p => ({ id: p.id, url: p.url }))
   }
-  if (props.storageSpotId) {
-    form.value.storageId = props.storageSpotId
+  if (props.defaultStorageId) {
+    form.value.storageId = props.defaultStorageId
   }
   await fetchCategories()
 })
@@ -122,17 +124,22 @@ async function handleFileChange(e) {
   try {
     const compressed = await compressImage(file)
     const url = URL.createObjectURL(compressed)
-    form.value.photos.push({ id: Date.now(), url })
+    form.value.photos.push({ id: 'new_' + Date.now(), url, file: compressed, isNew: true })
   } catch {
     // fallback to original file
     const url = URL.createObjectURL(file)
-    form.value.photos.push({ id: Date.now(), url })
+    form.value.photos.push({ id: 'new_' + Date.now(), url, file, isNew: true })
   }
   e.target.value = ''
 }
 
 function handlePhotoDelete(photoId) {
+  const photo = form.value.photos.find(p => p.id === photoId)
   form.value.photos = form.value.photos.filter(p => p.id !== photoId)
+  // Track existing (non-new) photo IDs for backend deletion
+  if (photo && !photo.isNew) {
+    deletedPhotoIds.value.push(photoId)
+  }
 }
 
 function handlePhotoPreview(photo) {
@@ -147,9 +154,11 @@ function handleSave() {
     quantity: form.value.quantity || 1,
     note: form.value.note,
     photos: form.value.photos,
-    storage_spot_id: locationData.value.storageId || props.storageSpotId,
+    deletedPhotoIds: deletedPhotoIds.value,
+    storage_spot_id: locationData.value.storageId || props.defaultStorageId,
     house_id: locationData.value.houseId || props.defaultHouseId,
-    room_id: locationData.value.roomId || props.defaultRoomId
+    room_id: locationData.value.roomId || props.defaultRoomId,
+    custom_storage_name: locationData.value.customStorageName || null
   })
 }
 </script>

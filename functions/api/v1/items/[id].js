@@ -117,10 +117,11 @@ export async function onRequestPut(context) {
     const categoryId = body.category_id !== undefined ? body.category_id : existing.category_id;
     const quantity = body.quantity !== undefined ? body.quantity : existing.quantity;
     const note = body.note !== undefined ? body.note : existing.note;
+    const storageSpotId = body.storage_spot_id !== undefined ? body.storage_spot_id : existing.storage_spot_id;
 
     await env.DB.prepare(
-      `UPDATE items SET name = ?, category_id = ?, quantity = ?, note = ?, updated_at = datetime('now') WHERE id = ?`
-    ).bind(name, categoryId, quantity, note, itemId).run();
+      `UPDATE items SET name = ?, category_id = ?, quantity = ?, note = ?, storage_spot_id = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(name, categoryId, quantity, note, storageSpotId, itemId).run();
 
     const item = await env.DB.prepare(
       `SELECT i.*, c.name as category_name FROM items i LEFT JOIN categories c ON i.category_id = c.id WHERE i.id = ?`

@@ -62,21 +62,6 @@
         </AppCard>
       </div>
 
-      <!-- FAB (mobile) -->
-      <button class="fab" @click="fabOpen = !fabOpen" aria-label="添加">
-        <i :class="fabOpen ? 'fa-solid fa-xmark' : 'fa-solid fa-plus'"></i>
-      </button>
-      <div v-if="fabOpen" class="fab-menu">
-        <button class="fab-menu-item add-current" @click="showAddModal = true; fabOpen = false">
-          <i class="fa-solid fa-house"></i>
-          添加住所
-        </button>
-        <button class="fab-menu-item add-item" @click="showItemForm = true; fabOpen = false">
-          <i class="fa-solid fa-box"></i>
-          直接添加物品
-        </button>
-      </div>
-
       <!-- Add house modal -->
       <Teleport to="body">
         <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">
@@ -111,25 +96,12 @@
         @confirm="deleteHouse"
       />
 
-      <!-- Item form bottom sheet (mobile) / modal (PC) -->
-      <Teleport to="body">
-        <div v-if="showItemForm" class="bottom-sheet-overlay" @click.self="showItemForm = false"></div>
-        <div v-if="showItemForm" class="bottom-sheet">
-          <div class="sheet-handle"></div>
-          <h3>添加物品</h3>
-          <ItemForm
-            :family-id="familyId"
-            @save="onItemSave"
-            @cancel="showItemForm = false"
-          />
-        </div>
-      </Teleport>
     </section>
   </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '@/api'
 import { useFamilyStore } from '@/stores/family'
@@ -139,7 +111,7 @@ import AppCard from '@/components/AppCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import ItemForm from '@/components/ItemForm.vue'
+import { useFab } from '@/composables/useFab'
 
 const router = useRouter()
 const familyStore = useFamilyStore()
@@ -151,8 +123,7 @@ const showAddModal = ref(false)
 const newHouseName = ref('')
 const showDeleteConfirm = ref(false)
 const deleteTarget = ref(null)
-const fabOpen = ref(false)
-const showItemForm = ref(false)
+const { pendingAction, clearAction } = useFab()
 
 const familyId = computed(() => familyStore.currentFamilyId)
 
@@ -201,15 +172,12 @@ async function deleteHouse() {
   }
 }
 
-async function onItemSave(itemData) {
-  try {
-    await api.post('/items', itemData)
-    showItemForm.value = false
-    showToast('物品添加成功')
-  } catch {
-    showToast('添加物品失败', 'error')
+watch(pendingAction, (action) => {
+  if (action === 'add-current') {
+    showAddModal.value = true
+    clearAction()
   }
-}
+})
 
 onMounted(() => {
   fetchHouses()

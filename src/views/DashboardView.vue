@@ -33,6 +33,7 @@
           :icon-color="'var(--color-primary)'"
           :num="data.stats.house_count"
           label="住所数"
+          to="/houses"
         />
         <StatCard
           icon="fa-solid fa-door-open"
@@ -40,6 +41,7 @@
           :icon-color="'var(--color-success)'"
           :num="data.stats.room_count"
           label="房间数"
+          to="/rooms"
         />
         <StatCard
           icon="fa-solid fa-box-archive"
@@ -47,6 +49,7 @@
           :icon-color="'var(--color-info)'"
           :num="data.stats.storage_count"
           label="收纳位数"
+          to="/storage"
         />
         <StatCard
           icon="fa-solid fa-cube"
@@ -54,6 +57,7 @@
           :icon-color="'var(--color-pink)'"
           :num="data.stats.item_count"
           label="物品数"
+          to="/items"
         />
       </section>
 
@@ -84,16 +88,26 @@
               <tbody>
                 <tr v-for="item in data.recent_items" :key="item.id">
                   <td>
-                    <div class="table-name-cell">
+                    <router-link :to="'/items/' + item.id" class="table-name-cell">
+                      <img
+                        v-if="item.first_photo_url"
+                        :src="item.first_photo_url"
+                        :alt="item.name"
+                        class="table-thumb"
+                      />
+                      <div v-else class="table-thumb table-thumb-icon" :style="{ background: getCategoryColor(item.category).bg }">
+                        <i :class="getCategoryIcon(item.category)" :style="{ color: getCategoryColor(item.category).color }"></i>
+                      </div>
                       <span>{{ item.name }}</span>
-                    </div>
+                    </router-link>
                   </td>
                   <td>
-                    <span class="badge badge-neutral">{{ item.category }}</span>
+                    <span v-if="item.category" class="badge badge-primary">{{ item.category }}</span>
+                    <span v-else class="badge badge-neutral">未分类</span>
                   </td>
-                  <td>{{ item.quantity }}</td>
-                  <td>{{ item.location }}</td>
-                  <td>{{ item.updated_at }}</td>
+                  <td>{{ item.quantity || 1 }}</td>
+                  <td style="font-size: var(--text-xs); color: var(--color-secondary);">{{ item.location || '-' }}</td>
+                  <td>{{ formatDate(item.created_at) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -101,15 +115,25 @@
             <!-- Mobile: Card list -->
             <ul class="mobile-item-list">
               <li v-for="item in data.recent_items" :key="item.id" class="mobile-item-card">
+                <img
+                  v-if="item.first_photo_url"
+                  :src="item.first_photo_url"
+                  :alt="item.name"
+                  class="mobile-item-thumb"
+                />
+                <div v-else class="mobile-item-icon" :style="{ background: getCategoryColor(item.category).bg }">
+                  <i :class="getCategoryIcon(item.category)" :style="{ color: getCategoryColor(item.category).color }"></i>
+                </div>
                 <div class="mobile-item-top">
                   <span class="mobile-item-name">{{ item.name }}</span>
-                  <span class="badge badge-neutral">{{ item.category }}</span>
+                  <span v-if="item.category" class="badge badge-primary">{{ item.category }}</span>
+                  <span v-else class="badge badge-neutral">未分类</span>
                 </div>
                 <div class="mobile-item-bottom">
                   <span class="mobile-item-location">
-                    <i class="fa-solid fa-location-dot"></i> {{ item.location }}
+                    <i class="fa-solid fa-location-dot"></i> {{ item.location || '-' }}
                   </span>
-                  <span class="mobile-item-time">{{ item.updated_at }}</span>
+                  <span class="mobile-item-time">{{ formatDate(item.created_at) }}</span>
                 </div>
               </li>
             </ul>
@@ -119,8 +143,8 @@
         <!-- Sidebar -->
         <aside class="dashboard-sidebar">
           <!-- House item counts -->
-          <section class="sidebar-section">
-            <h3 class="section-title">房屋物品统计</h3>
+          <h3 class="sidebar-section-title">各住所物品数</h3>
+          <section class="sidebar-card">
             <EmptyState
               v-if="!data.houses || data.houses.length === 0"
               icon="fa-solid fa-house"
@@ -143,8 +167,8 @@
           </section>
 
           <!-- Family members -->
-          <section class="sidebar-section">
-            <h3 class="section-title">家庭成员</h3>
+          <h3 class="sidebar-section-title">家庭成员</h3>
+          <section class="sidebar-card">
             <EmptyState
               v-if="!data.members || data.members.length === 0"
               icon="fa-solid fa-users"
@@ -178,6 +202,53 @@ import AppLayout from '@/layouts/AppLayout.vue'
 import StatCard from '@/components/StatCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
+
+const CATEGORY_ICONS = {
+  '衣物': 'fa-solid fa-shirt',
+  '数码': 'fa-solid fa-laptop',
+  '证件': 'fa-solid fa-id-card',
+  '药品': 'fa-solid fa-pills',
+  '工具': 'fa-solid fa-wrench',
+  '书籍': 'fa-solid fa-book',
+  '日用': 'fa-solid fa-pump-soap',
+  '食品': 'fa-solid fa-utensils',
+  '玩具': 'fa-solid fa-puzzle-piece',
+  '运动': 'fa-solid fa-dumbbell',
+  '文具': 'fa-solid fa-pen',
+  '厨具': 'fa-solid fa-kitchen-set',
+}
+
+const CATEGORY_COLORS = {
+  '衣物': { bg: '#FDF2F8', color: '#DB2777' },
+  '数码': { bg: '#EFF6FF', color: '#3B82F6' },
+  '证件': { bg: '#FFF7ED', color: '#EA580C' },
+  '药品': { bg: '#F0FDF4', color: '#16A34A' },
+  '工具': { bg: '#FFF1EB', color: '#E8743B' },
+  '书籍': { bg: '#EDE9FE', color: '#7C3AED' },
+  '日用': { bg: '#F3F4F6', color: '#6B7280' },
+  '食品': { bg: '#FEF3C7', color: '#D97706' },
+  '玩具': { bg: '#FDF2F8', color: '#EC4899' },
+  '运动': { bg: '#ECFDF5', color: '#059669' },
+  '文具': { bg: '#EFF6FF', color: '#2563EB' },
+  '厨具': { bg: '#FEF3C7', color: '#B45309' },
+}
+
+function getCategoryIcon(categoryName) {
+  return CATEGORY_ICONS[categoryName] || 'fa-solid fa-box'
+}
+
+function getCategoryColor(categoryName) {
+  return CATEGORY_COLORS[categoryName] || { bg: 'var(--color-primary-light)', color: 'var(--color-primary)' }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + day
+}
 
 const authStore = useAuthStore()
 const familyStore = useFamilyStore()
@@ -297,15 +368,22 @@ watch(() => familyStore.currentFamilyId, () => {
 }
 
 /* Sidebar */
-.sidebar-section {
+.sidebar-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   padding: var(--space-4);
 }
 
-.sidebar-section + .sidebar-section {
-  margin-top: var(--space-4);
+.sidebar-section-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-neutral-900);
+  margin-bottom: var(--space-4);
+}
+
+.sidebar-card + .sidebar-card {
+  margin-top: var(--space-6);
 }
 
 /* House progress */
